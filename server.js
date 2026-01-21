@@ -22,6 +22,8 @@ button { padding: 5px 10px; }
 <button onclick="clearChat()">Effacer chat</button>
 
 <script>
+const SECRET_TOKEN = process.env.ACCESS_TOKEN;
+
 let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
 
 function renderChat() {
@@ -46,16 +48,19 @@ async function send() {
     renderChat();
 
     try {
-        const res = await fetch("http://localhost:3000/chat", { // ou ton URL backend
+        const res = await fetch("https://web-chat-alpha-two.vercel.app", { // remplacer par l'URL de ton backend Vercel
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                "x-secret": SECRET_TOKEN
+            },
             body: JSON.stringify({ message: text })
         });
 
         const data = await res.json();
         chatHistory.push({ role: "assistant", content: data.reply });
 
-        // Sauvegarder en local pour persistances
+        // garder les 50 derniers messages
         if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
         localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
         renderChat();
