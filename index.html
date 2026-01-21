@@ -4,26 +4,36 @@
 <meta charset="UTF-8">
 <title>ChatGPT WebApp</title>
 <style>
-body { font-family: sans-serif; max-width: 600px; margin: auto; }
+body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
 #chat { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin-bottom: 10px; }
 .user { color: blue; margin: 5px 0; }
 .bot { color: green; margin: 5px 0; }
 input { width: 80%; padding: 5px; }
-button { padding: 5px 10px; }
+button { padding: 5px 10px; margin-left: 5px; }
+#token-section { margin-bottom: 20px; }
 </style>
 </head>
 <body>
 
 <h2>ChatGPT WebApp</h2>
-<div id="chat"></div>
 
-<input id="input" placeholder="Écris ton message...">
-<button onclick="send()">Envoyer</button>
-<button onclick="clearChat()">Effacer chat</button>
+<div id="token-section">
+  <input id="token-input" type="password" placeholder="Entrez votre token secret">
+  <button onclick="setToken()">Valider Token</button>
+</div>
+
+<div id="chat-section" style="display:none;">
+  <div id="chat"></div>
+  <input id="input" placeholder="Écris ton message...">
+  <button onclick="send()">Envoyer</button>
+  <button onclick="clearChat()">Effacer chat</button>
+</div>
 
 <script>
+let SECRET_TOKEN = null;
 let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
 
+// --- Initialisation chat ---
 function renderChat() {
     const chat = document.getElementById("chat");
     chat.innerHTML = "";
@@ -36,7 +46,30 @@ function renderChat() {
     chat.scrollTop = chat.scrollHeight;
 }
 
+// --- Définir le token saisi ---
+function setToken() {
+    const input = document.getElementById("token-input");
+    const token = input.value.trim();
+    if (!token) {
+        alert("Token requis !");
+        return;
+    }
+    SECRET_TOKEN = token;
+
+    // Afficher la section chat
+    document.getElementById("token-section").style.display = "none";
+    document.getElementById("chat-section").style.display = "block";
+
+    renderChat();
+}
+
+// --- Envoyer message ---
 async function send() {
+    if (!SECRET_TOKEN) {
+        alert("Token manquant !");
+        return;
+    }
+
     const input = document.getElementById("input");
     const text = input.value.trim();
     if (!text) return;
@@ -46,19 +79,23 @@ async function send() {
     renderChat();
 
     try {
-        const res = await fetch("http://localhost:3000/chat", { // ou ton URL backend
+        const res = await fetch("https://TON_BACKEND_URL/chat", { // remplace par ton backend
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json",
+                "x-secret": SECRET_TOKEN
+            },
             body: JSON.stringify({ message: text })
         });
 
         const data = await res.json();
         chatHistory.push({ role: "assistant", content: data.reply });
 
-        // Sauvegarder en local pour persistances
+        // garder 50 derniers messages
         if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
         localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
         renderChat();
+
     } catch (err) {
         console.error(err);
         chatHistory.push({ role: "assistant", content: "Erreur réseau / serveur" });
@@ -66,14 +103,12 @@ async function send() {
     }
 }
 
+// --- Effacer chat ---
 function clearChat() {
     chatHistory = [];
     localStorage.removeItem("chatHistory");
     renderChat();
 }
-
-// Initialisation
-renderChat();
 </script>
 
 </body>
