@@ -2,136 +2,159 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ChatGPT WebApp</title>
+
 <style>
-body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
-#chat { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin-bottom: 10px; }
-.user { color: blue; margin: 5px 0; }
-.bot { color: green; margin: 5px 0; }
-input { width: 80%; padding: 5px; }
-button { padding: 5px 10px; margin-left: 5px; }
-#token-section { margin-bottom: 20px; }
+body {
+  font-family: sans-serif;
+  max-width: 320px;
+  margin: auto;
+  padding: 6px;
+  font-size: 14px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 6px 0;
+}
+
+#chat {
+  border: 1px solid #ccc;
+  padding: 6px;
+  height: 300px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.user { color: blue; margin: 4px 0; }
+.bot { color: green; margin: 4px 0; }
+
+input {
+  width: 68%;
+  padding: 4px;
+  font-size: 13px;
+}
+
+button {
+  padding: 4px 6px;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+#token-section {
+  margin-bottom: 10px;
+}
 </style>
 </head>
+
 <body>
 
 <h2>ChatGPT WebApp <small id="version"></small></h2>
 
 <div id="token-section">
-  <input id="token-input" type="password" placeholder="Entrez votre token secret">
-  <button onclick="setToken()">Valider Token</button>
+  <input id="token-input" type="password" placeholder="Token secret">
+  <button onclick="setToken()">OK</button>
 </div>
 
 <div id="chat-section" style="display:none;">
   <div id="chat"></div>
-  <input id="input" placeholder="Écris ton message...">
+  <input id="input" placeholder="Message...">
   <button onclick="send()">Envoyer</button>
-  <button onclick="clearChat()">Effacer chat</button>
+  <button onclick="clearChat()">Clear</button>
 </div>
 
 <script>
-// ===== VERSION FRONTEND =====
-const APP_VERSION = "v1.3.0-debug";
+// ===== VERSION FRONT =====
+const APP_VERSION = "v1.4.0-mobile";
 document.getElementById("version").textContent = APP_VERSION;
 
 // ===== CONFIG =====
-const BACKEND_URL = "https://TON_BACKEND_URL/chat"; // à remplacer
+const BACKEND_URL = "https://web-chat-alpha-two.vercel.app/api/chat";
 
 let SECRET_TOKEN = null;
 let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
 
 // ===== UI =====
 function renderChat() {
-    const chat = document.getElementById("chat");
-    chat.innerHTML = "";
-    chatHistory.forEach(msg => {
-        const div = document.createElement("div");
-        div.className = msg.role;
-        div.textContent = msg.role === "user"
-          ? "Moi: " + msg.content
-          : "Bot: " + msg.content;
-        chat.appendChild(div);
-    });
-    chat.scrollTop = chat.scrollHeight;
+  const chat = document.getElementById("chat");
+  chat.innerHTML = "";
+  chatHistory.forEach(msg => {
+    const div = document.createElement("div");
+    div.className = msg.role === "user" ? "user" : "bot";
+    div.textContent = (msg.role === "user" ? "Moi: " : "Bot: ") + msg.content;
+    chat.appendChild(div);
+  });
+  chat.scrollTop = chat.scrollHeight;
 }
 
 // ===== TOKEN =====
 function setToken() {
-    const input = document.getElementById("token-input");
-    const token = input.value.trim();
-    if (!token) {
-        alert("Token requis !");
-        return;
-    }
-    SECRET_TOKEN = token;
-    document.getElementById("token-section").style.display = "none";
-    document.getElementById("chat-section").style.display = "block";
-    renderChat();
+  const t = document.getElementById("token-input").value.trim();
+  if (!t) return alert("Token requis");
+  SECRET_TOKEN = t;
+  document.getElementById("token-section").style.display = "none";
+  document.getElementById("chat-section").style.display = "block";
+  renderChat();
 }
 
 // ===== SEND =====
 async function send() {
-    if (!SECRET_TOKEN) {
-        alert("Token manquant !");
-        return;
+  if (!SECRET_TOKEN) return alert("Token manquant");
+
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  chatHistory.push({ role: "user", content: text });
+  renderChat();
+
+  try {
+    const res = await fetch(BACKEND_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-secret": SECRET_TOKEN
+      },
+      body: JSON.stringify({ message: text })
+    });
+
+    const data = await res.json();
+
+    if (data.error) {
+      chatHistory.push({
+        role: "assistant",
+        content: "ERREUR: " + data.error +
+          (data.backendVersion ? " [backend " + data.backendVersion + "]" : "")
+      });
+    } else {
+      chatHistory.push({
+        role: "assistant",
+        content: data.reply +
+          (data.backendVersion ? "\n[backend " + data.backendVersion + "]" : "")
+      });
     }
 
-    const input = document.getElementById("input");
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = "";
-
-    chatHistory.push({ role: "user", content: text });
+    if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
+    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
     renderChat();
 
-    try {
-        const res = await fetch(BACKEND_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-secret": SECRET_TOKEN
-            },
-            body: JSON.stringify({ message: text })
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-            chatHistory.push({
-              role: "assistant",
-              content:
-                "ERREUR: " + data.error +
-                (data.details ? " | " + JSON.stringify(data.details) : "") +
-                (data.backendVersion ? " [backend " + data.backendVersion + "]" : "")
-            });
-        } else {
-            chatHistory.push({
-              role: "assistant",
-              content:
-                data.reply +
-                (data.backendVersion ? "\n\n[backend " + data.backendVersion + "]" : "")
-            });
-        }
-
-        if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
-        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-        renderChat();
-
-    } catch (err) {
-        console.error(err);
-        chatHistory.push({
-          role: "assistant",
-          content: "Exception JS: " + err.message
-        });
-        renderChat();
-    }
+  } catch (err) {
+    chatHistory.push({
+      role: "assistant",
+      content: "Exception JS: " + err.message
+    });
+    renderChat();
+  }
 }
 
 // ===== CLEAR =====
 function clearChat() {
-    chatHistory = [];
-    localStorage.removeItem("chatHistory");
-    renderChat();
+  chatHistory = [];
+  localStorage.removeItem("chatHistory");
+  renderChat();
 }
 </script>
 
