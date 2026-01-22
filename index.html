@@ -15,7 +15,7 @@ button { padding: 5px 10px; margin-left: 5px; }
 </head>
 <body>
 
-<h2>ChatGPT WebApp</h2>
+<h2>ChatGPT WebApp <small id="version"></small></h2>
 
 <div id="token-section">
   <input id="token-input" type="password" placeholder="Entrez votre token secret">
@@ -30,23 +30,32 @@ button { padding: 5px 10px; margin-left: 5px; }
 </div>
 
 <script>
+// ===== VERSION FRONTEND =====
+const APP_VERSION = "v1.3.0-debug";
+document.getElementById("version").textContent = APP_VERSION;
+
+// ===== CONFIG =====
+const BACKEND_URL = "https://TON_BACKEND_URL/chat"; // à remplacer
+
 let SECRET_TOKEN = null;
 let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
 
-// --- Initialisation chat ---
+// ===== UI =====
 function renderChat() {
     const chat = document.getElementById("chat");
     chat.innerHTML = "";
     chatHistory.forEach(msg => {
         const div = document.createElement("div");
         div.className = msg.role;
-        div.textContent = msg.role === "user" ? "Moi: " + msg.content : "Bot: " + msg.content;
+        div.textContent = msg.role === "user"
+          ? "Moi: " + msg.content
+          : "Bot: " + msg.content;
         chat.appendChild(div);
     });
     chat.scrollTop = chat.scrollHeight;
 }
 
-// --- Définir le token saisi ---
+// ===== TOKEN =====
 function setToken() {
     const input = document.getElementById("token-input");
     const token = input.value.trim();
@@ -55,15 +64,12 @@ function setToken() {
         return;
     }
     SECRET_TOKEN = token;
-
-    // Afficher la section chat
     document.getElementById("token-section").style.display = "none";
     document.getElementById("chat-section").style.display = "block";
-
     renderChat();
 }
 
-// --- Envoyer message ---
+// ===== SEND =====
 async function send() {
     if (!SECRET_TOKEN) {
         alert("Token manquant !");
@@ -79,7 +85,7 @@ async function send() {
     renderChat();
 
     try {
-        const res = await fetch("https://web-chat-alpha-two.vercel.app", { // remplace par ton backend
+        const res = await fetch(BACKEND_URL, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -89,21 +95,39 @@ async function send() {
         });
 
         const data = await res.json();
-        chatHistory.push({ role: "assistant", content: data.reply });
 
-        // garder 50 derniers messages
+        if (data.error) {
+            chatHistory.push({
+              role: "assistant",
+              content:
+                "ERREUR: " + data.error +
+                (data.details ? " | " + JSON.stringify(data.details) : "") +
+                (data.backendVersion ? " [backend " + data.backendVersion + "]" : "")
+            });
+        } else {
+            chatHistory.push({
+              role: "assistant",
+              content:
+                data.reply +
+                (data.backendVersion ? "\n\n[backend " + data.backendVersion + "]" : "")
+            });
+        }
+
         if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
         localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
         renderChat();
 
     } catch (err) {
         console.error(err);
-        chatHistory.push({ role: "assistant", content: "Erreur réseau / serveur" });
+        chatHistory.push({
+          role: "assistant",
+          content: "Exception JS: " + err.message
+        });
         renderChat();
     }
 }
 
-// --- Effacer chat ---
+// ===== CLEAR =====
 function clearChat() {
     chatHistory = [];
     localStorage.removeItem("chatHistory");
