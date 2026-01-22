@@ -1,85 +1,120 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>ChatGPT WebApp</title>
-<style>
-body { font-family: sans-serif; max-width: 600px; margin: auto; }
-#chat { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin-bottom: 10px; }
-.user { color: blue; margin: 5px 0; }
-.bot { color: green; margin: 5px 0; }
-input { width: 80%; padding: 5px; }
-button { padding: 5px 10px; }
-</style>
-</head>
-<body>
+// server.js
+import express from "express";
+import fetch from "node-fetch";
+import cors from "cors";
 
-<h2>ChatGPT WebApp</h2>
-<div id="chat"></div>
+const app = express();
+app.use(express.json());
+app.use(cors({ origin: "*" }));
 
-<input id="input" placeholder="Écris ton message...">
-<button onclick="send()">Envoyer</button>
-<button onclick="clearChat()">Effacer chat</button>
+// ===== VERSION =====
+const BACKEND_VERSION = "v1.3.0-debug";
 
-<script>
+// ===== CONFIG =====
+const SYSTEM_PROMPT = `
+Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.
+Tu adaptes ton niveau à l’utilisateur, tu donnes des explications structurées,
+des exemples concrets et tu vérifies la cohérence avant de répondre.
+`;
+
 const SECRET_TOKEN = process.env.ACCESS_TOKEN;
+const OPENAI_KEY = process.env.OPENAI_KEY;
 
-let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+let chatHistory = [];
 
-function renderChat() {
-    const chat = document.getElementById("chat");
-    chat.innerHTML = "";
-    chatHistory.forEach(msg => {
-        const div = document.createElement("div");
-        div.className = msg.role;
-        div.textContent = msg.role === "user" ? "Moi: " + msg.content : "Bot: " + msg.content;
-        chat.appendChild(div);
+// ===== LOG AU DEMARRAGE =====
+console.log("=== BACKEND START ===");
+console.log("Version :", BACKEND_VERSION);
+console.log("ACCESS_TOKEN défini :", !!SECRET_TOKEN);
+console.log("OPENAI_KEY défini   :", !!OPENAI_KEY);
+console.log("=====================");
+
+// ===== ENDPOINT CHAT =====
+app.post("/chat", async (req, res) => {
+  console.log("\n--- /chat ---");
+
+  const userToken = req.headers["x-secret"];
+
+  if (!userToken) {
+    console.error("❌ Token manquant");
+    return res.status(401).json({ error: "Token manquant" });
+  }
+
+  if (userToken !== SECRET_TOKEN) {
+    console.error("❌ Token invalide :", userToken);
+    return res.status(403).json({ error: "Token invalide" });
+  }
+
+  if (!OPENAI_KEY) {
+    console.error("❌ OPENAI_KEY non définie");
+    return res.status(500).json({ error: "OPENAI_KEY non définie" });
+  }
+
+  const userMessage = req.body.message;
+  if (!userMessage) {
+    console.error("❌ Message manquant");
+    return res.status(400).json({ error: "Message manquant" });
+  }
+
+  console.log("Message utilisateur :", userMessage);
+
+  chatHistory.push({ role: "user", content: userMessage });
+  if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
+
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...chatHistory
+  ];
+
+  try {
+    console.log("➡️ Appel OpenAI...");
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-5.2",
+        messages
+      })
     });
-    chat.scrollTop = chat.scrollHeight;
-}
 
-async function send() {
-    const input = document.getElementById("input");
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = "";
+    console.log("Statut OpenAI :", response.status);
 
-    chatHistory.push({ role: "user", content: text });
-    renderChat();
+    const data = await response.json();
 
-    try {
-        const res = await fetch("https://web-chat-alpha-two.vercel.app", { // remplacer par l'URL de ton backend Vercel
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-secret": SECRET_TOKEN
-            },
-            body: JSON.stringify({ message: text })
-        });
-
-        const data = await res.json();
-        chatHistory.push({ role: "assistant", content: data.reply });
-
-        // garder les 50 derniers messages
-        if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
-        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-        renderChat();
-    } catch (err) {
-        console.error(err);
-        chatHistory.push({ role: "assistant", content: "Erreur réseau / serveur" });
-        renderChat();
+    if (!response.ok) {
+      console.error("❌ Erreur OpenAI :", data);
+      return res.status(500).json({
+        error: "Erreur OpenAI",
+        details: data,
+        backendVersion: BACKEND_VERSION
+      });
     }
-}
 
-function clearChat() {
-    chatHistory = [];
-    localStorage.removeItem("chatHistory");
-    renderChat();
-}
+    const reply = data.choices[0].message.content;
+    console.log("Réponse OpenAI :", reply);
 
-// Initialisation
-renderChat();
-</script>
+    chatHistory.push({ role: "assistant", content: reply });
+    if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
 
-</body>
-</html>
+    res.json({
+      reply,
+      backendVersion: BACKEND_VERSION
+    });
+
+  } catch (err) {
+    console.error("❌ Exception serveur :", err);
+    res.status(500).json({
+      error: "Exception serveur",
+      details: err.message,
+      backendVersion: BACKEND_VERSION
+    });
+  }
+});
+
+app.listen(3000, () => {
+  console.log("Backend démarré sur http://localhost:3000");
+});
