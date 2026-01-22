@@ -1,6 +1,4 @@
-import fetch from "node-fetch";
-
-const BACKEND_VERSION = "v1.4.0-mobile";
+const BACKEND_VERSION = "v1.4.1-vercel-native-fetch";
 
 const SYSTEM_PROMPT = `
 Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.
@@ -19,6 +17,13 @@ export default async function handler(req, res) {
 
   const SECRET_TOKEN = process.env.ACCESS_TOKEN;
   const OPENAI_KEY = process.env.OPENAI_KEY;
+
+  if (!OPENAI_KEY) {
+    return res.status(500).json({
+      error: "OPENAI_KEY absente",
+      backendVersion: BACKEND_VERSION
+    });
+  }
 
   const userToken = req.headers["x-secret"];
   if (!userToken || userToken !== SECRET_TOKEN) {
@@ -73,7 +78,7 @@ export default async function handler(req, res) {
     res.json({ reply, backendVersion: BACKEND_VERSION });
 
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       error: "Exception serveur",
       details: err.message,
       backendVersion: BACKEND_VERSION
