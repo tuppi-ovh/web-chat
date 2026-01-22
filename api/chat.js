@@ -1,9 +1,10 @@
-const BACKEND_VERSION = "v1.4.1-vercel-native-fetch";
+const BACKEND_VERSION = "v1.6.0-multichat";
 
 const SYSTEM_PROMPT = `
 Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.
 Tu adaptes ton niveau à l’utilisateur, tu donnes des explications structurées,
 des exemples concrets et tu vérifies la cohérence avant de répondre.
+**Toutes tes réponses doivent être formatées en Markdown clair.**
 `;
 
 let chatHistory = [];
@@ -75,7 +76,11 @@ export default async function handler(req, res) {
     const reply = data.choices[0].message.content;
     chatHistory.push({ role: "assistant", content: reply });
 
-    res.json({ reply, backendVersion: BACKEND_VERSION });
+    res.json({
+      reply,
+      backendVersion: BACKEND_VERSION,
+      markdown: true
+    });
 
   } catch (err) {
     return res.status(500).json({

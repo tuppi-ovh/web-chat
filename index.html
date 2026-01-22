@@ -3,55 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChatGPT WebApp</title>
-
+<title>ChatGPT Multi-Chat</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-body {
-  font-family: sans-serif;
-  max-width: 320px;
-  margin: auto;
-  padding: 6px;
-  font-size: 14px;
-}
-
-h2 {
-  font-size: 16px;
-  margin: 6px 0;
-}
-
-#chat {
-  border: 1px solid #ccc;
-  padding: 6px;
-  height: 300px;
-  overflow-y: auto;
-  margin-bottom: 6px;
-  font-size: 13px;
-}
-
+body { font-family: sans-serif; max-width: 320px; margin: auto; padding: 6px; font-size: 14px; }
+h2 { font-size: 16px; margin: 6px 0; }
+#tabs { display: flex; flex-wrap: wrap; margin-bottom: 6px; }
+#tabs button { flex: 1; margin: 2px 1px; padding: 4px; font-size: 12px; }
+#chat { border: 1px solid #ccc; padding: 6px; height: 300px; overflow-y: auto; margin-bottom: 6px; font-size: 13px; }
 .user { color: blue; margin: 4px 0; }
 .bot { color: green; margin: 4px 0; }
-
-input {
-  width: 68%;
-  padding: 4px;
-  font-size: 13px;
-}
-
-button {
-  padding: 4px 6px;
-  font-size: 12px;
-  margin-left: 4px;
-}
-
-#token-section {
-  margin-bottom: 10px;
-}
+input { width: 68%; padding: 4px; font-size: 13px; }
+button { padding: 4px 6px; font-size: 12px; margin-left: 4px; }
+#token-section { margin-bottom: 10px; }
 </style>
 </head>
-
 <body>
 
-<h2>ChatGPT WebApp <small id="version"></small></h2>
+<h2>ChatGPT Multi-Chat <small id="version"></small></h2>
 
 <div id="token-section">
   <input id="token-input" type="password" placeholder="Token secret">
@@ -59,6 +28,8 @@ button {
 </div>
 
 <div id="chat-section" style="display:none;">
+  <div id="tabs"></div>
+  <button onclick="addChat()">+ Nouveau chat</button>
   <div id="chat"></div>
   <input id="input" placeholder="Message...">
   <button onclick="send()">Envoyer</button>
@@ -66,96 +37,123 @@ button {
 </div>
 
 <script>
-// ===== VERSION FRONT =====
-const APP_VERSION = "v1.4.0-mobile";
+// ===== VERSION =====
+const APP_VERSION = "v1.6.0-multichat";
 document.getElementById("version").textContent = APP_VERSION;
 
 // ===== CONFIG =====
 const BACKEND_URL = "https://web-chat-alpha-two.vercel.app/api/chat";
-
+const MAX_CHATS = 10;
 let SECRET_TOKEN = null;
-let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+let chats = [];
+let currentChat = 0;
 
-// ===== UI =====
-function renderChat() {
-  const chat = document.getElementById("chat");
-  chat.innerHTML = "";
-  chatHistory.forEach(msg => {
-    const div = document.createElement("div");
-    div.className = msg.role === "user" ? "user" : "bot";
-    div.textContent = (msg.role === "user" ? "Moi: " : "Bot: ") + msg.content;
-    chat.appendChild(div);
+// ===== COOKIES =====
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+function setCookie(name, value, days=365){
+  const d = new Date(); d.setTime(d.getTime() + (days*24*60*60*1000));
+  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
+}
+
+// ===== INIT CHATS =====
+for(let i=0;i<MAX_CHATS;i++){
+  const h = getCookie(`chat${i}`);
+  chats[i] = h ? JSON.parse(h) : [];
+}
+
+// ===== RENDER =====
+function renderTabs(){
+  const tabsDiv = document.getElementById("tabs");
+  tabsDiv.innerHTML = "";
+  chats.forEach((_,i)=>{
+    const btn = document.createElement("button");
+    btn.textContent = `Chat ${i+1}`;
+    btn.style.fontWeight = (i===currentChat?"bold":"normal");
+    btn.onclick = ()=>{switchChat(i)};
+    tabsDiv.appendChild(btn);
   });
-  chat.scrollTop = chat.scrollHeight;
+}
+function renderChat(){
+  const chatDiv = document.getElementById("chat");
+  chatDiv.innerHTML = "";
+  chats[currentChat].forEach(msg=>{
+    const div = document.createElement("div");
+    div.className = msg.role==="user"?"user":"bot";
+    div.innerHTML = msg.content;
+    chatDiv.appendChild(div);
+  });
+  chatDiv.scrollTop = chatDiv.scrollHeight;
 }
 
 // ===== TOKEN =====
-function setToken() {
+function setToken(){
   const t = document.getElementById("token-input").value.trim();
-  if (!t) return alert("Token requis");
+  if(!t) return alert("Token requis");
   SECRET_TOKEN = t;
-  document.getElementById("token-section").style.display = "none";
-  document.getElementById("chat-section").style.display = "block";
+  document.getElementById("token-section").style.display="none";
+  document.getElementById("chat-section").style.display="block";
+  renderTabs();
   renderChat();
 }
 
-// ===== SEND =====
-async function send() {
-  if (!SECRET_TOKEN) return alert("Token manquant");
+// ===== SWITCH CHAT =====
+function switchChat(i){ currentChat=i; renderTabs(); renderChat(); }
+function addChat(){
+  if(chats.length>=MAX_CHATS) return alert("Max chats atteints");
+  chats.push([]); currentChat=chats.length-1;
+  renderTabs(); renderChat();
+}
+function saveCurrentChat(){ setCookie(`chat${currentChat}`, JSON.stringify(chats[currentChat])); }
 
+// ===== SEND MESSAGE =====
+async function send(){
+  if(!SECRET_TOKEN) return alert("Token manquant");
   const input = document.getElementById("input");
   const text = input.value.trim();
-  if (!text) return;
-  input.value = "";
+  if(!text) return; input.value="";
 
-  chatHistory.push({ role: "user", content: text });
+  chats[currentChat].push({role:"user", content:text});
   renderChat();
 
-  try {
-    const res = await fetch(BACKEND_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+  try{
+    const res = await fetch(BACKEND_URL,{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
         "x-secret": SECRET_TOKEN
       },
-      body: JSON.stringify({ message: text })
+      body: JSON.stringify({message:text})
     });
-
     const data = await res.json();
 
-    if (data.error) {
-      chatHistory.push({
-        role: "assistant",
-        content: "ERREUR: " + data.error +
-          (data.backendVersion ? " [backend " + data.backendVersion + "]" : "")
-      });
+    if(data.error){
+      chats[currentChat].push({role:"assistant", content:"ERREUR: "+data.error});
     } else {
-      chatHistory.push({
-        role: "assistant",
-        content: data.reply +
-          (data.backendVersion ? "\n[backend " + data.backendVersion + "]" : "")
-      });
+      chats[currentChat].push({role:"assistant", content:data.reply});
     }
 
-    if (chatHistory.length > 50) chatHistory = chatHistory.slice(-50);
-    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+    if(chats[currentChat].length>50) chats[currentChat]=chats[currentChat].slice(-50);
+    saveCurrentChat();
     renderChat();
 
-  } catch (err) {
-    chatHistory.push({
-      role: "assistant",
-      content: "Exception JS: " + err.message
-    });
+  } catch(err){
+    chats[currentChat].push({role:"assistant", content:"Exception JS: "+err.message});
     renderChat();
   }
 }
 
 // ===== CLEAR =====
-function clearChat() {
-  chatHistory = [];
-  localStorage.removeItem("chatHistory");
+function clearChat(){
+  chats[currentChat]=[];
+  setCookie(`chat${currentChat}`,"",-1);
   renderChat();
 }
+
+// ===== AUTOLOAD =====
+renderTabs(); renderChat();
 </script>
 
 </body>
