@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChatGPT Multi-Chat</title>
+<title>ChatGPT Multi-Chat Serveur</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
 body { font-family: sans-serif; max-width: 320px; margin: auto; padding: 6px; font-size: 14px; }
@@ -20,7 +20,7 @@ button { padding: 4px 6px; font-size: 12px; margin-left: 4px; }
 </head>
 <body>
 
-<h2>ChatGPT Multi-Chat <small id="version"></small></h2>
+<h2>ChatGPT Multi-Chat Serveur <small id="version"></small></h2>
 
 <div id="token-section">
   <input id="token-input" type="password" placeholder="Token secret">
@@ -38,43 +38,27 @@ button { padding: 4px 6px; font-size: 12px; margin-left: 4px; }
 
 <script>
 // ===== VERSION =====
-const APP_VERSION = "v1.6.0-multichat";
+const APP_VERSION = "v1.7.1";
 document.getElementById("version").textContent = APP_VERSION;
 
 // ===== CONFIG =====
 const BACKEND_URL = "https://web-chat-alpha-two.vercel.app/api/chat";
 const MAX_CHATS = 10;
 let SECRET_TOKEN = null;
-let chats = [];
+let chats = Array(MAX_CHATS).fill().map(()=>[]); // historique local pour rendu
 let currentChat = 0;
 
-// ===== COOKIES =====
-function getCookie(name) {
-  const match = document.cookie.match(new RegExp('(^| )'+name+'=([^;]+)'));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-function setCookie(name, value, days=365){
-  const d = new Date(); d.setTime(d.getTime() + (days*24*60*60*1000));
-  document.cookie = `${name}=${encodeURIComponent(value)};expires=${d.toUTCString()};path=/`;
-}
-
-// ===== INIT CHATS =====
-for(let i=0;i<MAX_CHATS;i++){
-  const h = getCookie(`chat${i}`);
-  chats[i] = h ? JSON.parse(h) : [];
-}
-
-// ===== RENDER =====
+// ===== RENDER TABS & CHAT =====
 function renderTabs(){
   const tabsDiv = document.getElementById("tabs");
   tabsDiv.innerHTML = "";
-  chats.forEach((_,i)=>{
+  for(let i=0;i<MAX_CHATS;i++){
     const btn = document.createElement("button");
     btn.textContent = `Chat ${i+1}`;
     btn.style.fontWeight = (i===currentChat?"bold":"normal");
     btn.onclick = ()=>{switchChat(i)};
     tabsDiv.appendChild(btn);
-  });
+  }
 }
 function renderChat(){
   const chatDiv = document.getElementById("chat");
@@ -82,7 +66,7 @@ function renderChat(){
   chats[currentChat].forEach(msg=>{
     const div = document.createElement("div");
     div.className = msg.role==="user"?"user":"bot";
-    div.innerHTML = msg.content;
+    div.innerHTML = marked.parse(msg.content);
     chatDiv.appendChild(div);
   });
   chatDiv.scrollTop = chatDiv.scrollHeight;
@@ -99,14 +83,14 @@ function setToken(){
   renderChat();
 }
 
-// ===== SWITCH CHAT =====
+// ===== SWITCH / ADD CHAT =====
 function switchChat(i){ currentChat=i; renderTabs(); renderChat(); }
 function addChat(){
-  if(chats.length>=MAX_CHATS) return alert("Max chats atteints");
-  chats.push([]); currentChat=chats.length-1;
+  if(currentChat>=MAX_CHATS-1) return alert("Max chats atteints");
+  currentChat++;
+  chats[currentChat]=[];
   renderTabs(); renderChat();
 }
-function saveCurrentChat(){ setCookie(`chat${currentChat}`, JSON.stringify(chats[currentChat])); }
 
 // ===== SEND MESSAGE =====
 async function send(){
@@ -125,10 +109,10 @@ async function send(){
         "Content-Type":"application/json",
         "x-secret": SECRET_TOKEN
       },
-      body: JSON.stringify({message:text})
+      body: JSON.stringify({ message: text, chatId: currentChat })
     });
-    const data = await res.json();
 
+    const data = await res.json();
     if(data.error){
       chats[currentChat].push({role:"assistant", content:"ERREUR: "+data.error});
     } else {
@@ -136,7 +120,6 @@ async function send(){
     }
 
     if(chats[currentChat].length>50) chats[currentChat]=chats[currentChat].slice(-50);
-    saveCurrentChat();
     renderChat();
 
   } catch(err){
@@ -148,7 +131,6 @@ async function send(){
 // ===== CLEAR =====
 function clearChat(){
   chats[currentChat]=[];
-  setCookie(`chat${currentChat}`,"",-1);
   renderChat();
 }
 
