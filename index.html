@@ -3,19 +3,53 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChatGPT Pro</title>
+<title>ChatGPT Pro Vision</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-body { font-family:sans-serif; max-width:320px; margin:auto; padding:6px; }
-#tabs button { font-size:12px; margin:2px; }
-#chat { border:1px solid #ccc; height:300px; overflow-y:auto; padding:6px; }
-.user { color:blue }
-.bot { color:green }
+body {
+  background:#111;
+  color:#eee;
+  font-family:sans-serif;
+  max-width:360px;
+  margin:auto;
+  padding:8px;
+}
+
+button {
+  background:#222;
+  color:#eee;
+  border:1px solid #444;
+  padding:4px 6px;
+  margin:2px;
+}
+
+#chat {
+  border:1px solid #333;
+  height:320px;
+  overflow-y:auto;
+  padding:6px;
+  margin:6px 0;
+}
+
+.user { color:#6ab0ff }
+.bot { color:#9dff9d }
+
+textarea {
+  width:100%;
+  height:60px;
+  background:#000;
+  color:#fff;
+  border:1px solid #333;
+}
+
+input[type=file] {
+  color:#ccc;
+}
 </style>
 </head>
 <body>
 
-<h3>ChatGPT Pro v2.0</h3>
+<h3>ChatGPT Pro Vision v3</h3>
 
 <input id="token" type="password" placeholder="Token">
 <button onclick="init()">OK</button>
@@ -31,7 +65,9 @@ body { font-family:sans-serif; max-width:320px; margin:auto; padding:6px; }
 
 <div id="chat"></div>
 
-<input id="input">
+<textarea id="input" placeholder="Message (3 lignes max)"></textarea>
+<input type="file" id="image" accept="image/*">
+<br>
 <button onclick="send()">Send</button>
 
 </div>
@@ -85,6 +121,14 @@ async function send() {
   const text=input.value.trim();
   if(!text) return;
   input.value="";
+
+  let imageBase64 = null;
+  const file = document.getElementById("image").files[0];
+  if(file){
+    imageBase64 = await toBase64(file);
+    document.getElementById("image").value="";
+  }
+
   chats[current].messages.push({role:"user",content:text});
   renderChat();
 
@@ -96,17 +140,27 @@ async function send() {
     },
     body:JSON.stringify({
       history: chats[current].messages,
-      message: text
+      message: text,
+      imageBase64
     })
   });
+
   const data=await res.json();
   chats[current].messages.push({role:"assistant",content:data.reply});
   chats[current].messages = chats[current].messages.slice(-50);
   save(); renderChat();
 }
 
+function toBase64(file){
+  return new Promise((res)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(",")[1]);
+    r.readAsDataURL(file);
+  });
+}
+
 function newChat(){
-  if(chats.length>=MAX_CHATS) return alert("Max 10");
+  if(chats.length>=MAX_CHATS) return;
   chats.push({name:`Chat ${chats.length+1}`,messages:[]});
   current=chats.length-1;
   save(); renderTabs(); renderChat();
@@ -120,18 +174,18 @@ function deleteChat(){
 }
 
 function renameChat(){
-  const n=prompt("Nom du chat",chats[current].name);
+  const n=prompt("Nom",chats[current].name);
   if(n){ chats[current].name=n; save(); renderTabs(); }
 }
 
 function exportChat(){
   const data = JSON.stringify(chats[current],null,2);
   navigator.clipboard.writeText(data);
-  alert("Chat copié dans le presse-papiers");
+  alert("Chat copié");
 }
 
 function importChat(){
-  const json=prompt("Colle le JSON du chat");
+  const json=prompt("Colle le JSON");
   try{
     const obj=JSON.parse(json);
     if(obj.messages){
