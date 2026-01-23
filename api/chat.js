@@ -1,10 +1,9 @@
-const BACKEND_VERSION = "v3.0.0-vision";
+const BACKEND_VERSION = "v3.1.1-vision-fixed";
 
 const SYSTEM_PROMPT = `
 Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.
-Tu adaptes ton niveau à l’utilisateur, tu donnes des explications structurées,
-des exemples concrets et tu vérifies la cohérence avant de répondre.
-Toutes tes réponses doivent être formatées en Markdown clair.
+Tu adaptes ton niveau à l’utilisateur.
+Tu formates toujours en Markdown.
 `;
 
 export default async function handler(req, res) {
@@ -22,16 +21,14 @@ export default async function handler(req, res) {
 
   const { history, message, imageBase64 } = req.body;
 
-  if (!message || !Array.isArray(history)) {
-    return res.status(400).json({ error: "history ou message manquant" });
-  }
-
   let userContent = [{ type: "text", text: message }];
 
   if (imageBase64) {
     userContent.push({
-      type: "image_base64",
-      image_base64: imageBase64
+      type: "image_url",
+      image_url: {
+        url: "data:image/png;base64," + imageBase64
+      }
     });
   }
 
@@ -39,35 +36,41 @@ export default async function handler(req, res) {
     { role: "system", content: SYSTEM_PROMPT },
     ...history,
     { role: "user", content: userContent }
-  ].slice(-51);
+  ];
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "gpt-4.1",   // modèle vision stable
-        messages
-      })
-    });
+    const response = await fetch(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",   // modèle vision le + sûr
+          messages
+        })
+      }
+    );
 
     const data = await response.json();
+    console.log("OpenAI raw:", data);
 
     if (!response.ok) {
-      return res.status(500).json({ error: "OpenAI error", details: data });
+      return res.status(500).json({
+        error: "OpenAI error",
+        details: data
+      });
     }
 
     const reply = data.choices[0].message.content;
-
-    res.json({
-      reply,
-      backendVersion: BACKEND_VERSION
-    });
+    res.json({ reply, backendVersion: BACKEND_VERSION });
 
   } catch (err) {
-    res.status(500).json({ error: "Exception serveur", details: err.message });
+    res.status(500).json({
+      error: "Exception serveur",
+      details: err.message
+    });
   }
 }

@@ -145,8 +145,20 @@ async function send() {
     })
   });
 
-  const data=await res.json();
-  chats[current].messages.push({role:"assistant",content:data.reply});
+const data = await res.json();
+
+if (data.error) {
+  chats[current].messages.push({
+    role:"assistant",
+    content: "❌ ERREUR:\n```json\n" + JSON.stringify(data,null,2) + "\n```"
+  });
+} else {
+  chats[current].messages.push({
+    role:"assistant",
+    content: data.reply
+  });
+}
+
   chats[current].messages = chats[current].messages.slice(-50);
   save(); renderChat();
 }
