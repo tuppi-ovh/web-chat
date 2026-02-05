@@ -72,14 +72,14 @@ input[type=file] {
 
   <div id="tabs"></div>
   <button onclick="newChat()">+ Chat</button>
-  <button onclick="deleteChat()">🗑</button>
-  <button onclick="renameChat()">✏️</button>
-  <button onclick="exportChat()">⬇️</button>
-  <button onclick="importChat()">⬆️</button>
+  <button onclick="deleteChat()">🗑 Delete</button>
+  <button onclick="renameChat()">✏️ Rename</button>
+  <button onclick="exportChat()">⬇️ Copy</button>
+  <button onclick="importChat()">⬆️ Paste</button>
 
-  <!-- Sync cloud -->
-  <button onclick="pullCloud()">Sync ⬇️</button>
-  <button onclick="pushCloud()">Sync ⬆️</button>
+  <!-- Cloud sync -->
+  <button onclick="pullCloud()">⬇️ Pull</button>
+  <button onclick="pushCloud()">⬆️ Push</button>
 
   <div id="chat"></div>
 
@@ -95,12 +95,12 @@ input[type=file] {
 const BACKEND = "https://chat.tuppi.ovh/api/chat";
 
 /**
- * Backend sync (NOUVEAU)
- * Recommandé: même origine que la web app => "/api/chats"
- * Si ton endpoint est sur Vercel, mets l’URL complète:
- *   const SYNC_BACKEND = "https://chat.tuppi.ovh/api/chats";
+ * Backend sync (cloud)
+ * Recommandé si même origine que la web app => "/api/chats"
+ * Sinon mets l’URL complète Vercel:
+ * const SYNC_BACKEND = "https://ton-projet.vercel.app/api/chats";
  */
-const SYNC_BACKEND = "https://chat.tuppi.ovh/api/chats";
+const SYNC_BACKEND = "/api/chats";
 
 const MAX_CHATS = 10;
 
@@ -141,11 +141,11 @@ async function init() {
 
   // Pull cloud au démarrage (si dispo)
   try {
-    setStatus("Sync cloud…");
+    setStatus("Pull…");
     await pullCloud();
     setStatus("Prêt");
   } catch (e) {
-    setStatus("Sync cloud indisponible (mode local)");
+    setStatus("Cloud indisponible (mode local)");
   }
 }
 
@@ -269,7 +269,7 @@ function renameChat() {
 function exportChat() {
   const data = JSON.stringify(chats[current], null, 2);
   navigator.clipboard.writeText(data);
-  alert("Chat copié");
+  alert("Chat copié (clipboard)");
 }
 
 function importChat() {
@@ -296,7 +296,6 @@ async function pullCloud() {
     headers: { "x-secret": token }
   });
 
-  // si endpoint pas trouvé sur l’hébergement => 404
   if (!res.ok) {
     const t = await res.text().catch(() => "");
     throw new Error("pull failed: " + res.status + " " + t);
@@ -304,7 +303,7 @@ async function pullCloud() {
 
   const data = await res.json();
 
-  // Le backend proposé renvoie { chats: {chats, updatedAt} } ou { chats: null }
+  // backend: { chats: {chats, updatedAt} } ou { chats: null }
   if (data && data.chats && data.chats.chats && Array.isArray(data.chats.chats)) {
     chats = data.chats.chats;
     if (chats.length === 0) chats = [{ name:"Chat 1", messages:[] }];
@@ -318,7 +317,7 @@ async function pullCloud() {
 async function pushCloud() {
   if (!token) throw new Error("no token");
 
-  setStatus("Upload…");
+  setStatus("Push…");
   const res = await fetch(SYNC_BACKEND, {
     method: "PUT",
     headers: {
@@ -333,7 +332,7 @@ async function pushCloud() {
 
   if (!res.ok) {
     const t = await res.text().catch(() => "");
-    setStatus("Upload erreur");
+    setStatus("Push erreur");
     throw new Error("push failed: " + res.status + " " + t);
   }
 
