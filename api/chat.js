@@ -4,6 +4,7 @@ const SYSTEM_PROMPT = `
 Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.
 Tu adaptes ton niveau à l’utilisateur.
 Tu formates toujours en Markdown.
+Ne mets jamais ta réponse dans un bloc de code markdown ; répond en Markdown brut.
 `;
 
 export default async function handler(req, res) {

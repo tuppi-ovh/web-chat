@@ -1,3 +1,5 @@
+---
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -42,6 +44,12 @@ textarea {
   border:1px solid #333;
 }
 
+/* iOS Safari: empêche le zoom automatique au focus */
+input, textarea, select {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
 input[type=file] {
   color:#ccc;
 }
@@ -50,6 +58,20 @@ input[type=file] {
   font-size: 12px;
   color: #aaa;
   margin-top: 4px;
+}
+
+/* Version ordi */
+@media (min-width: 900px) {
+  body {
+    max-width: 900px;
+    padding: 16px;
+  }
+  #chat {
+    height: 650px;
+  }
+  textarea {
+    height: 110px;
+  }
 }
 </style>
 
@@ -74,11 +96,12 @@ input[type=file] {
   <button onclick="newChat()">+ Chat</button>
   <button onclick="deleteChat()">🗑 Delete</button>
   <button onclick="renameChat()">✏️ Rename</button>
-  <button onclick="exportChat()">⬇️ Copy</button>
-  <button onclick="importChat()">⬆️ Paste</button>
 
-  <!-- Cloud sync -->
-  <button onclick="pullCloud()">⬇️ Pull</button>
+  <!-- Copy / Paste avec icônes remplacées -->
+  <button onclick="exportChat()">📋 Copy</button>
+  <button onclick="importChat()">📥 Paste</button>
+
+  <!-- Cloud sync : Pull supprimé, Push conservé -->
   <button onclick="pushCloud()">⬆️ Push</button>
 
   <div id="chat"></div>
@@ -91,31 +114,21 @@ input[type=file] {
 </div>
 
 <script>
-/** Backend chat (existant) */
 const BACKEND = "https://chat.tuppi.ovh/api/chat";
-
-/**
- * Backend sync (cloud)
- * Recommandé si même origine que la web app => "/api/chats"
- * Sinon mets l’URL complète Vercel:
- * const SYNC_BACKEND = "https://ton-projet.vercel.app/api/chats";
- */
 const SYNC_BACKEND = "/api/chats";
-
 const MAX_CHATS = 10;
 
 let token;
 let chats = JSON.parse(localStorage.getItem("chats") || "[]");
 if (chats.length === 0) chats = [{ name:"Chat 1", messages:[] }];
-
 let current = 0;
 
-// --- util status ---
+// --- status ---
 function setStatus(msg) {
   document.getElementById("status").textContent = msg || "";
 }
 
-// --- persistence local ---
+// --- local persistence ---
 function saveLocal() {
   localStorage.setItem("chats", JSON.stringify(chats));
 }
@@ -135,11 +148,10 @@ async function init() {
   if (!token) return;
 
   document.getElementById("app").style.display = "block";
-
   renderTabs();
   renderChat();
 
-  // Pull cloud au démarrage (si dispo)
+  // Pull cloud uniquement au démarrage
   try {
     setStatus("Pull…");
     await pullCloud();
@@ -303,7 +315,6 @@ async function pullCloud() {
 
   const data = await res.json();
 
-  // backend: { chats: {chats, updatedAt} } ou { chats: null }
   if (data && data.chats && data.chats.chats && Array.isArray(data.chats.chats)) {
     chats = data.chats.chats;
     if (chats.length === 0) chats = [{ name:"Chat 1", messages:[] }];
