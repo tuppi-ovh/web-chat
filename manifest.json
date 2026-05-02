@@ -1,7 +1,8 @@
 {
-  "name": "ChatGPT Pro",
-  "short_name": "ChatGPT",
-  "start_url": "/",
+  "name": "web-chat",
+  "short_name": "chat",
+  "start_url": "/index.html",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#111111",
   "theme_color": "#111111",
