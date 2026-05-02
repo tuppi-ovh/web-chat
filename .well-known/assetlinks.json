@@ -1,0 +1,10 @@
+[ 
+    { 
+        "relation": ["delegate_permission/common.handle_all_urls"], 
+        "target": { 
+            "namespace": "android_app", 
+            "package_name": "ovh.tuppi.chat.twa", 
+            "sha256_cert_fingerprints": [ "07:E9:1F:8E:EB:BF:B8:E8:79:84:33:D9:1B:6E:24:9E:7C:EC:55:07:2D:CF:12:32:94:A2:BB:DF:17:55:CA:D9" ] 
+            } 
+    } 
+]
