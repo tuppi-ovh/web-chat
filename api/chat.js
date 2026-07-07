@@ -1,4 +1,4 @@
-const BACKEND_VERSION = "v3.1.1-vision-fixed";
+const BACKEND_VERSION = "v3.1.2-vision-fixed";
 
 const SYSTEM_PROMPT = `
 Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "gpt-5.2",   // modèle vision le + sûr
+          model: "gpt-5.4",   // modèle vision le + sûr
           messages
         })
       }

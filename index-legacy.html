@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ChatGPT Pro Vision</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
@@ -45,174 +45,299 @@ textarea {
 input[type=file] {
   color:#ccc;
 }
+
+.small {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 4px;
+}
 </style>
 
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#111111">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="ChatGPT">
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#111111" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="ChatGPT" />
 
 </head>
 <body>
 
 <h3>ChatGPT Pro Vision v3</h3>
 
-<input id="token" type="password" placeholder="Token">
+<input id="token" type="password" placeholder="Token" />
 <button onclick="init()">OK</button>
+<div class="small" id="status"></div>
 
 <div id="app" style="display:none">
 
-<div id="tabs"></div>
-<button onclick="newChat()">+ Chat</button>
-<button onclick="deleteChat()">🗑</button>
-<button onclick="renameChat()">✏️</button>
-<button onclick="exportChat()">⬇️</button>
-<button onclick="importChat()">⬆️</button>
+  <div id="tabs"></div>
+  <button onclick="newChat()">+ Chat</button>
+  <button onclick="deleteChat()">🗑 Delete</button>
+  <button onclick="renameChat()">✏️ Rename</button>
+  <button onclick="exportChat()">⬇️ Copy</button>
+  <button onclick="importChat()">⬆️ Paste</button>
 
-<div id="chat"></div>
+  <!-- Cloud sync -->
+  <button onclick="pullCloud()">⬇️ Pull</button>
+  <button onclick="pushCloud()">⬆️ Push</button>
 
-<textarea id="input" placeholder="Message (3 lignes max)"></textarea>
-<input type="file" id="image" accept="image/*">
-<br>
-<button onclick="send()">Send</button>
+  <div id="chat"></div>
+
+  <textarea id="input" placeholder="Message (3 lignes max)"></textarea>
+  <input type="file" id="image" accept="image/*" />
+  <br />
+  <button onclick="send()">Send</button>
 
 </div>
 
 <script>
+/** Backend chat (existant) */
 const BACKEND = "https://chat.tuppi.ovh/api/chat";
+
+/**
+ * Backend sync (cloud)
+ * Recommandé si même origine que la web app => "/api/chats"
+ * Sinon mets l’URL complète Vercel:
+ * const SYNC_BACKEND = "https://ton-projet.vercel.app/api/chats";
+ */
+const SYNC_BACKEND = "/api/chats";
+
 const MAX_CHATS = 10;
 
 let token;
 let chats = JSON.parse(localStorage.getItem("chats") || "[]");
-if (chats.length === 0)
-  chats = [{ name:"Chat 1", messages:[] }];
+if (chats.length === 0) chats = [{ name:"Chat 1", messages:[] }];
 
 let current = 0;
 
-function save() {
+// --- util status ---
+function setStatus(msg) {
+  document.getElementById("status").textContent = msg || "";
+}
+
+// --- persistence local ---
+function saveLocal() {
   localStorage.setItem("chats", JSON.stringify(chats));
 }
 
-function init() {
-  token = document.getElementById("token").value;
-  document.getElementById("app").style.display="block";
-  renderTabs(); renderChat();
+// --- debounce sync ---
+let syncTimer = null;
+function pushCloudDebounced() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    pushCloud().catch(()=>{});
+  }, 1500);
+}
+
+// --- init ---
+async function init() {
+  token = document.getElementById("token").value.trim();
+  if (!token) return;
+
+  document.getElementById("app").style.display = "block";
+
+  renderTabs();
+  renderChat();
+
+  // Pull cloud au démarrage (si dispo)
+  try {
+    setStatus("Pull…");
+    await pullCloud();
+    setStatus("Prêt");
+  } catch (e) {
+    setStatus("Cloud indisponible (mode local)");
+  }
 }
 
 function renderTabs() {
   const t = document.getElementById("tabs");
-  t.innerHTML="";
-  chats.forEach((c,i)=>{
-    const b=document.createElement("button");
-    b.textContent=c.name;
-    if(i===current) b.style.fontWeight="bold";
-    b.onclick=()=>{current=i;renderTabs();renderChat();}
+  t.innerHTML = "";
+  chats.forEach((c, i) => {
+    const b = document.createElement("button");
+    b.textContent = c.name;
+    if (i === current) b.style.fontWeight = "bold";
+    b.onclick = () => { current = i; renderTabs(); renderChat(); };
     t.appendChild(b);
   });
 }
 
 function renderChat() {
-  const c=document.getElementById("chat");
-  c.innerHTML="";
-  chats[current].messages.forEach(m=>{
-    const d=document.createElement("div");
-    d.className=m.role==="user"?"user":"bot";
-    d.innerHTML=marked.parse(m.content);
+  const c = document.getElementById("chat");
+  c.innerHTML = "";
+  chats[current].messages.forEach(m => {
+    const d = document.createElement("div");
+    d.className = m.role === "user" ? "user" : "bot";
+    d.innerHTML = marked.parse(m.content);
     c.appendChild(d);
   });
-  c.scrollTop=c.scrollHeight;
+  c.scrollTop = c.scrollHeight;
 }
 
 async function send() {
-  const text=input.value.trim();
-  if(!text) return;
-  input.value="";
+  const inputEl = document.getElementById("input");
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = "";
 
   let imageBase64 = null;
   const file = document.getElementById("image").files[0];
-  if(file){
+  if (file) {
     imageBase64 = await toBase64(file);
-    document.getElementById("image").value="";
+    document.getElementById("image").value = "";
   }
 
-  chats[current].messages.push({role:"user",content:text});
+  chats[current].messages.push({ role: "user", content: text });
   renderChat();
 
-  const res=await fetch(BACKEND,{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-secret":token
-    },
-    body:JSON.stringify({
-      history: chats[current].messages,
-      message: text,
-      imageBase64
-    })
-  });
+  try {
+    const res = await fetch(BACKEND, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-secret": token
+      },
+      body: JSON.stringify({
+        history: chats[current].messages,
+        message: text,
+        imageBase64
+      })
+    });
 
-const data = await res.json();
+    const data = await res.json();
 
-if (data.error) {
-  chats[current].messages.push({
-    role:"assistant",
-    content: "❌ ERREUR:\n```json\n" + JSON.stringify(data,null,2) + "\n```"
-  });
-} else {
-  chats[current].messages.push({
-    role:"assistant",
-    content: data.reply
-  });
-}
+    if (data.error) {
+      chats[current].messages.push({
+        role: "assistant",
+        content: "❌ ERREUR:\n```json\n" + JSON.stringify(data, null, 2) + "\n```"
+      });
+    } else {
+      chats[current].messages.push({
+        role: "assistant",
+        content: data.reply
+      });
+    }
+  } catch (e) {
+    chats[current].messages.push({
+      role: "assistant",
+      content: "❌ ERREUR réseau: " + String(e.message || e)
+    });
+  }
 
   chats[current].messages = chats[current].messages.slice(-50);
-  save(); renderChat();
+
+  saveLocal();
+  renderChat();
+
+  // Auto push cloud (best effort)
+  pushCloudDebounced();
 }
 
-function toBase64(file){
-  return new Promise((res)=>{
-    const r=new FileReader();
-    r.onload=()=>res(r.result.split(",")[1]);
+function toBase64(file) {
+  return new Promise((res) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
     r.readAsDataURL(file);
   });
 }
 
-function newChat(){
-  if(chats.length>=MAX_CHATS) return;
-  chats.push({name:`Chat ${chats.length+1}`,messages:[]});
-  current=chats.length-1;
-  save(); renderTabs(); renderChat();
+// --- chats management ---
+function newChat() {
+  if (chats.length >= MAX_CHATS) return;
+  chats.push({ name: `Chat ${chats.length + 1}`, messages: [] });
+  current = chats.length - 1;
+  saveLocal(); renderTabs(); renderChat();
+  pushCloudDebounced();
 }
 
-function deleteChat(){
-  if(chats.length===1) return;
-  chats.splice(current,1);
-  current=0;
-  save(); renderTabs(); renderChat();
+function deleteChat() {
+  if (chats.length === 1) return;
+  chats.splice(current, 1);
+  current = 0;
+  saveLocal(); renderTabs(); renderChat();
+  pushCloudDebounced();
 }
 
-function renameChat(){
-  const n=prompt("Nom",chats[current].name);
-  if(n){ chats[current].name=n; save(); renderTabs(); }
+function renameChat() {
+  const n = prompt("Nom", chats[current].name);
+  if (n) {
+    chats[current].name = n;
+    saveLocal(); renderTabs();
+    pushCloudDebounced();
+  }
 }
 
-function exportChat(){
-  const data = JSON.stringify(chats[current],null,2);
+function exportChat() {
+  const data = JSON.stringify(chats[current], null, 2);
   navigator.clipboard.writeText(data);
-  alert("Chat copié");
+  alert("Chat copié (clipboard)");
 }
 
-function importChat(){
-  const json=prompt("Colle le JSON");
-  try{
-    const obj=JSON.parse(json);
-    if(obj.messages){
+function importChat() {
+  const json = prompt("Colle le JSON");
+  try {
+    const obj = JSON.parse(json);
+    if (obj.messages) {
       chats.push(obj);
-      current=chats.length-1;
-      save(); renderTabs(); renderChat();
+      current = chats.length - 1;
+      saveLocal(); renderTabs(); renderChat();
+      pushCloudDebounced();
     }
-  }catch(e){ alert("JSON invalide"); }
+  } catch (e) {
+    alert("JSON invalide");
+  }
+}
+
+// --- cloud sync ---
+async function pullCloud() {
+  if (!token) throw new Error("no token");
+
+  const res = await fetch(SYNC_BACKEND, {
+    method: "GET",
+    headers: { "x-secret": token }
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error("pull failed: " + res.status + " " + t);
+  }
+
+  const data = await res.json();
+
+  // backend: { chats: {chats, updatedAt} } ou { chats: null }
+  if (data && data.chats && data.chats.chats && Array.isArray(data.chats.chats)) {
+    chats = data.chats.chats;
+    if (chats.length === 0) chats = [{ name:"Chat 1", messages:[] }];
+    current = 0;
+    saveLocal();
+    renderTabs();
+    renderChat();
+  }
+}
+
+async function pushCloud() {
+  if (!token) throw new Error("no token");
+
+  setStatus("Push…");
+  const res = await fetch(SYNC_BACKEND, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "x-secret": token
+    },
+    body: JSON.stringify({
+      chats,
+      updatedAt: Date.now()
+    })
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    setStatus("Push erreur");
+    throw new Error("push failed: " + res.status + " " + t);
+  }
+
+  setStatus("Synché");
+  setTimeout(() => setStatus(""), 1200);
 }
 </script>
 </body>
