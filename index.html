@@ -279,24 +279,31 @@ function renameChat() {
 }
 
 function exportChat() {
-  const data = JSON.stringify(chats[current], null, 2);
-  navigator.clipboard.writeText(data);
-  alert("Chat copié (clipboard)");
+  const msgs = chats[current]?.messages || [];
+  if (msgs.length === 0) {
+    alert("Aucun message à copier");
+    return;
+  }
+
+  const last = msgs[msgs.length - 1];
+  navigator.clipboard.writeText(last.content)
+    .then(() => alert("Dernier message copié"))
+    .catch(() => alert("Copie impossible"));
 }
 
 function importChat() {
-  const json = prompt("Colle le JSON");
-  try {
-    const obj = JSON.parse(json);
-    if (obj.messages) {
-      chats.push(obj);
-      current = chats.length - 1;
-      saveLocal(); renderTabs(); renderChat();
-      pushCloudDebounced();
-    }
-  } catch (e) {
-    alert("JSON invalide");
-  }
+  const text = prompt("Colle le texte");
+  if (!text) return;
+
+  chats[current].messages.push({
+    role: "user",
+    content: text
+  });
+
+  chats[current].messages = chats[current].messages.slice(-50);
+  saveLocal();
+  renderChat();
+  pushCloudDebounced();
 }
 
 // --- cloud sync ---
