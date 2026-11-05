@@ -98,8 +98,17 @@ input[type=file] {
   <button onclick="sendSummary()">📝 Synthèse</button>
 
   <div id="chat"></div>
-
-  <textarea id="input" placeholder="Message (3 lignes max)"></textarea>
+  <textarea
+  id="input"
+  name="chat-message"
+  placeholder="Écrire un message..."
+  autocomplete="off"
+  autocorrect="off"
+  autocapitalize="sentences"
+  spellcheck="false"
+  data-form-type="other"
+  enterkeyhint="send"
+></textarea>
   <input type="file" id="image" accept="image/*" />
   <br />
   <button onclick="send()">Send</button>
