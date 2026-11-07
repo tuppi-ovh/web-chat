@@ -1,4 +1,4 @@
-const BACKEND_VERSION = "v3.2.0-image-prompt";
+const BACKEND_VERSION = "v3.1.2-vision-fixed";
 
 const SYSTEM_PROMPT = `
 Tu es ChatGPT, un assistant expert, rigoureux, pédagogue et précis.

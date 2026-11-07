@@ -114,12 +114,10 @@ input[type=file] {
   <button onclick="send()">Send</button>
 </div>
 
-<button onclick="promptImage()">🖼 Générer Image</button>
-
 <script>
 const BACKEND = "https://chat.tuppi.ovh/api/chat";
 const SYNC_BACKEND = "/api/chats";
-const MAX_CHATS = 13;
+const MAX_CHATS = 10;
 const SUMMARY_PROMPT = "Faire une synthèse détaillée pour une reprise facile dans un nouveau chat";
 
 let token;
@@ -186,63 +184,23 @@ function renderTabs() {
 }
 
 function renderChat() {
-chats[current].messages.forEach(m => {
-  const d = document.createElement("div");
-  d.className = m.role === "user" ? "user" : "bot";
-  if (m.content && m.content.startsWith("<img ")) {
-    d.innerHTML = m.content; // affiche l’image
-  } else {
+  const c = document.getElementById("chat");
+  c.innerHTML = "";
+  chats[current].messages.forEach(m => {
+    const d = document.createElement("div");
+    d.className = m.role === "user" ? "user" : "bot";
     d.innerHTML = marked.parse(unwrapMarkdownFence(m.content));
-  }
-  c.appendChild(d);
-});
+    c.appendChild(d);
+  });
+  c.scrollTop = c.scrollHeight;
 }
+
 async function send(customText = null) {
   const inputEl = document.getElementById("input");
   const text = customText ?? inputEl.value.trim();
   if (!text) return;
   if (!customText) inputEl.value = "";
 
-  // --- Cas génération d'image ---
-  if (text.startsWith("/image ")) {
-    const prompt = text.slice(7).trim();
-    chats[current].messages.push({ role: "user", content: text });
-    renderChat();
-    try {
-      const res = await fetch("/api/generate-image", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-secret": token
-        },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await res.json();
-      if (data.imageBase64) {
-        chats[current].messages.push({
-          role: "assistant",
-          content: `<img src="data:image/png;base64,${data.imageBase64}" alt="image générée">`
-        });
-      } else {
-        chats[current].messages.push({
-          role: "assistant",
-          content: "Erreur génération d'image"
-        });
-      }
-    } catch (e) {
-      chats[current].messages.push({
-        role: "assistant",
-        content: "Erreur réseau ou serveur pour l'image."
-      });
-    }
-    chats[current].messages = chats[current].messages.slice(-50);
-    saveLocal();
-    renderChat();
-    pushCloudDebounced();
-    return;
-  }
-
-  // --- Cas message texte/chat normal (avec possibilité d'image uploadée) ---
   let imageBase64 = null;
   const file = document.getElementById("image").files[0];
   if (file && !customText) {
@@ -357,11 +315,6 @@ function importChat() {
   saveLocal();
   renderChat();
   pushCloudDebounced();
-}
-
-function promptImage() {
-  const desc = prompt("Décrivez l'image à générer:");
-  if (desc) send("/image " + desc);
 }
 
 // --- cloud sync ---
