@@ -32,6 +32,20 @@ button {
   margin:6px 0;
 }
 
+#chat img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+}
+
+select {
+  background: #222;
+  color: #eee;
+  border: 1px solid #444;
+  margin: 6px 0;
+}
+
 .user { color:#6ab0ff }
 .bot { color:#9dff9d }
 
@@ -96,6 +110,12 @@ input[type=file] {
   <button onclick="exportChat()">📋 Copy</button>
   <button onclick="importChat()">📥 Paste</button>
   <button onclick="sendSummary()">📝 Synthèse</button>
+
+<label for="model">Modèle :</label>
+<select id="model">
+  <option value="gpt-5.4">gpt-5.4 — Conversation</option>
+  <option value="gpt-image-1.5">gpt-image-1.5 — Générer une image</option>
+</select>
 
   <div id="chat"></div>
   <textarea
@@ -189,29 +209,82 @@ function renderChat() {
   chats[current].messages.forEach(m => {
     const d = document.createElement("div");
     d.className = m.role === "user" ? "user" : "bot";
-    d.innerHTML = marked.parse(unwrapMarkdownFence(m.content));
+    d.innerHTML = marked.parse(unwrapMarkdownFence(m.content || ""));
+
+    if (
+      typeof m.image === "string" &&
+      /^data:image\/(?:jpeg|png|webp);base64,/.test(m.image)
+    ) {
+      const img = document.createElement("img");
+      img.src = m.image;
+      img.alt = "Image générée";
+      d.appendChild(img);
+
+      const download = document.createElement("a");
+      download.href = m.image;
+      download.download = m.image.startsWith("data:image/jpeg")
+        ? "image-generee.jpg"
+        : m.image.startsWith("data:image/webp")
+          ? "image-generee.webp"
+          : "image-generee.png";
+      download.textContent = "Télécharger l’image";
+      d.appendChild(download);
+    }
+
     c.appendChild(d);
   });
+
   c.scrollTop = c.scrollHeight;
 }
 
-async function send(customText = null) {
-  const inputEl = document.getElementById("input");
-  const text = customText ?? inputEl.value.trim();
-  if (!text) return;
-  if (!customText) inputEl.value = "";
+let sending = false;
 
-  let imageBase64 = null;
-  const file = document.getElementById("image").files[0];
-  if (file && !customText) {
-    imageBase64 = await toBase64(file);
-    document.getElementById("image").value = "";
+async function send(customText = null) {
+  if (sending) return;
+
+  const inputEl = document.getElementById("input");
+  const imageEl = document.getElementById("image");
+  const text = (customText ?? inputEl.value).trim();
+
+  if (!text) return;
+
+  // Le bouton Synthèse utilise toujours le modèle texte.
+  const model = customText !== null
+    ? "gpt-5.4"
+    : document.getElementById("model").value;
+
+  const file = customText === null ? imageEl.files[0] : null;
+
+  if (model === "gpt-image-1.5" && file) {
+    setStatus("Retirez l’image jointe pour générer une nouvelle image.");
+    return;
   }
 
-  chats[current].messages.push({ role: "user", content: text });
-  renderChat();
+  const targetChat = chats[current];
+  const history = targetChat.messages.map(m => ({
+    role: m.role,
+    content: m.content || ""
+  }));
+
+  sending = true;
 
   try {
+    const imageBase64 = file ? await toBase64(file) : null;
+
+    targetChat.messages.push({ role: "user", content: text });
+
+    if (customText === null) {
+      inputEl.value = "";
+      imageEl.value = "";
+    }
+
+    renderChat();
+    setStatus(
+      model === "gpt-image-1.5"
+        ? "Génération de l’image…"
+        : "Réponse en cours…"
+    );
+
     const res = await fetch(BACKEND, {
       method: "POST",
       headers: {
@@ -219,36 +292,48 @@ async function send(customText = null) {
         "x-secret": token
       },
       body: JSON.stringify({
-        history: chats[current].messages,
+        model,
+        history,
         message: text,
-        imageBase64
+        imageBase64,
+        imageMimeType: file?.type || "image/png"
       })
     });
 
     const data = await res.json();
 
-    if (data.error) {
-      chats[current].messages.push({
-        role: "assistant",
-        content: "❌ ERREUR:\n```json\n" + JSON.stringify(data, null, 2) + "\n```"
-      });
-    } else {
-      chats[current].messages.push({
-        role: "assistant",
-        content: data.reply
-      });
+    if (!res.ok || data.error) {
+      throw new Error(data.error || `Erreur HTTP ${res.status}`);
     }
-  } catch (e) {
-    chats[current].messages.push({
-      role: "assistant",
-      content: "❌ ERREUR réseau: " + String(e.message || e)
-    });
-  }
 
-  chats[current].messages = chats[current].messages.slice(-50);
-  saveLocal();
-  renderChat();
-  pushCloudDebounced();
+    targetChat.messages.push({
+      role: "assistant",
+      content: data.reply || "",
+      ...(data.image ? { image: data.image } : {})
+    });
+
+    setStatus("");
+  } catch (e) {
+    targetChat.messages.push({
+      role: "assistant",
+      content: "Erreur : " + String(e.message || e)
+    });
+    setStatus("Échec de la requête");
+  } finally {
+    sending = false;
+    targetChat.messages = targetChat.messages.slice(-50);
+    renderChat();
+
+    // Une image peut dépasser le quota de localStorage.
+    // Une erreur locale ne doit pas bloquer la synchronisation cloud.
+    try {
+      saveLocal();
+    } catch (e) {
+      setStatus("Stockage local plein : sauvegarde cloud en cours.");
+    }
+
+    pushCloudDebounced();
+  }
 }
 
 function sendSummary() {
@@ -256,10 +341,13 @@ function sendSummary() {
 }
 
 function toBase64(file) {
-  return new Promise((res) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(",")[1]);
-    r.readAsDataURL(file);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = () => reject(
+      reader.error || new Error("Lecture de l’image impossible")
+    );
+    reader.readAsDataURL(file);
   });
 }
 
