@@ -108,7 +108,7 @@ input[type=file] {
   <button onclick="deleteChat()">🗑 Delete</button>
   <button onclick="renameChat()">✏️ Rename</button>
   <button onclick="exportChat()">📋 Copy</button>
-  <button onclick="importChat()">📥 Paste</button>
+  <button onclick="importContext()">📥 Context</button>
   <button onclick="sendSummary()">📝 Synthèse</button>
 
 <label for="model">Modèle :</label>
@@ -390,19 +390,11 @@ function exportChat() {
     .catch(() => alert("Copie impossible"));
 }
 
-function importChat() {
+function importContext() {
   const text = prompt("Colle le texte");
-  if (!text) return;
+  if (!text || !text.trim()) return;
 
-  chats[current].messages.push({
-    role: "user",
-    content: text
-  });
-
-  chats[current].messages = chats[current].messages.slice(-50);
-  saveLocal();
-  renderChat();
-  pushCloudDebounced();
+  send(`Mémoriser ce contexte: ${text}`);
 }
 
 // --- cloud sync ---
